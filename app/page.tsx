@@ -7,18 +7,19 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Form, FormItem, FormControl, FormField } from "@/components/ui/form";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AppSidebar } from "@/components/ui/app-sidebar";
-import { Textarea } from "@/components/ui/textarea";
 import Image from "next/image";
 import { ChatMessage } from "@/components/chat/chat-message";
 import { topicQuestions } from "@/constants/topics";
 import { Message } from "@/types/chats";
 import { PromptForm } from "@/components/chat/prompt-form";
 import { Send } from "lucide-react";
+import { ImageUploadInput } from "@/components/chat/image-upload";
 
 export default function TaxChatbot() {
   const [, setSelectedTopic] = useState<string | null>(null);
   const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const form = useForm({ defaultValues: { prompt: "" } });
@@ -29,12 +30,14 @@ export default function TaxChatbot() {
   };
 
   const onSubmit = async (values: { prompt: string }) => {
-    if (!values.prompt.trim()) return;
+    if (!values.prompt.trim() && !imageFile) return;
     setLoading(true);
 
+    // Simpan pesan user untuk UI
     const newUserMessage: Message = {
       role: "user",
-      parts: [{ text: values.prompt }],
+      parts: values.prompt ? [{ text: values.prompt }] : [{ text: "" }],
+      fileUrl: imageFile ? URL.createObjectURL(imageFile) : undefined, // ← for UI preview only
     };
 
     const updatedHistory = [...conversationHistory, newUserMessage];
@@ -42,19 +45,33 @@ export default function TaxChatbot() {
     form.reset();
 
     try {
-      const sanitizedHistory = conversationHistory.filter(
-        (msg) => msg.role === "user"
-      );
+      // Kirim hanya history role user dan bersihkan fileUrl
+      const sanitizedHistory = conversationHistory
+        .filter((msg) => msg.role === "user")
+        .map((msg) => ({
+          role: msg.role,
+          parts: msg.parts.map((p) => ({ text: p.text })), // remove fileUrl
+        }));
 
-      const history = [...sanitizedHistory, newUserMessage];
+      const history = [
+        ...sanitizedHistory,
+        {
+          role: "user",
+          parts: [{ text: values.prompt }],
+        },
+      ];
+
+      const formData = new FormData();
+      formData.append("history", JSON.stringify(history));
+      if (imageFile) formData.append("image", imageFile);
 
       const res = await fetch("/api/gemini", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history }),
+        body: formData,
       });
 
       const data = await res.json();
+
       setConversationHistory((prev) => [
         ...prev,
         {
@@ -67,6 +84,8 @@ export default function TaxChatbot() {
           references: data.references?.map((r: string) => ({ uri: r })) ?? [],
         },
       ]);
+
+      setImageFile(null);
     } catch (err) {
       console.error("Error:", err);
       setConversationHistory((prev) => prev.slice(0, -1));
@@ -140,6 +159,8 @@ export default function TaxChatbot() {
                         ))}
                       </div>
                       <PromptForm
+                        imageFile={imageFile}
+                        setImageFile={setImageFile}
                         form={form}
                         loading={loading}
                         onSubmit={onSubmit}
@@ -163,7 +184,7 @@ export default function TaxChatbot() {
                             </AvatarFallback>
                           </Avatar>
                           <div className="text-sm text-gray-500">
-                            Mengetik...
+                            Asisten sedang menulis...
                           </div>
                         </div>
                       )}
@@ -175,41 +196,71 @@ export default function TaxChatbot() {
             </Card>
           </section>
           {conversationHistory.length > 0 && (
-            <div className="lg:max-w-[840px] mx-auto bg-white items-center rounded-md sticky sm:bottom-10 bottom-4 px-2 left-0  right-0 z-10 w-full shadow-md">
+            <div className="lg:max-w-[840px] mx-auto bg-white border items-center rounded-md sticky sm:bottom-10 bottom-4 px-2 sm:px-0 left-0  right-0 z-10 w-full shadow-md overflow-hidden">
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="p-4">
+                  {!loading && imageFile && (
+                    <div className="w-fit relative mb-2">
+                      <img
+                        src={URL.createObjectURL(imageFile)}
+                        alt="Preview"
+                        className="max-h-20 rounded-md border"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setImageFile(null)}
+                        className="absolute top-0 right-0 bg-white border border-neutral-500 rounded-full w-6 h-6 flex items-center justify-center text-xs  shadow-md hover:bg-gray-100"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
                   <FormField
                     control={form.control}
                     name="prompt"
                     render={({ field }) => (
                       <FormItem>
                         <FormControl>
-                          <Textarea
-                            placeholder="Tanyakan seputar pajak..."
+                          <textarea
+                            placeholder="Tanyakan seputar pajak. Gunakan kata kunci yang relevan dan sesuai konteks, misalnya menyertakan kata seperti: 'pajak', 'PPN', 'PPh', atau 'faktur'."
                             disabled={loading}
                             {...field}
-                            rows={1}
+                            style={{ height: "64px" }}
                             onKeyDown={(e) => {
                               if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault(); // prevent newline
-                                form.handleSubmit(onSubmit)(); // trigger form submit
+                                e.preventDefault();
+                                form.handleSubmit(onSubmit)();
                               }
                             }}
-                            className="resize-none focus:border-none focus-visible:ring-red-500 focus-visible:ring-1 focus:ring-0"
                             onInput={(e) => {
                               const target = e.currentTarget;
                               target.style.height = "auto";
                               target.style.height = `${target.scrollHeight}px`;
                             }}
+                            className="resize-none w-full focus:ring-0 focus:outline-none md:pr-20 mb-4 pb-2 disabled:bg-white scrollbar-hide overflow-y-auto"
                           />
                         </FormControl>
                       </FormItem>
                     )}
                   />
+                  <ImageUploadInput
+                    onImageSelect={(file) => {
+                      setImageFile(file);
+                    }}
+                  />
                 </form>
               </Form>
-              <div className="absolute top-1/2 -translate-y-1/2 right-8 bg-red-50 p-3 rounded-full">
-                <Send className="w-4 h-4 text-red-500" />
+              <div
+                className={`absolute -translate-y-1/2 right-8 bg-red-50 p-3 rounded-full md:block hidden ${
+                  imageFile ? "bottom-0" : "top-1/2"
+                }`}
+              >
+                <Send
+                  onClick={form.handleSubmit(onSubmit)}
+                  className={`w-4 h-4 cursor-pointer  ${
+                    loading ? "text-neutral-700" : "text-red-500"
+                  }`}
+                />
               </div>
             </div>
           )}

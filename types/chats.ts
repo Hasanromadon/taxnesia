@@ -5,6 +5,7 @@ export interface Part {
 
 export interface Message {
   role: "user" | "model";
+  fileUrl?: string; // ← only used for image preview
   parts: { text: string }[];
   answer?: string;
   examples?: string[];

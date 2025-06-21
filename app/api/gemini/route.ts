@@ -15,32 +15,61 @@ if (!GEMINI_API_KEY) {
 }
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-// --- END: Optimization 2 ---
-
 export async function POST(req: Request) {
   try {
-    const { history } = await req.json();
+    const formData = await req.formData();
+    const historyJson = formData.get("history") as string;
+    const imageFile = formData.get("image") as File | null;
 
-    // --- START: Optimization 3 - Input Validation and Early Exit ---
+    const history = JSON.parse(historyJson);
+    // --- START: Input Validation ---
     if (
       !history ||
       !Array.isArray(history) ||
-      history.length === 0 || // Ensure history is not empty
+      history.length === 0 ||
       history[history.length - 1].role !== "user" ||
-      !history[history.length - 1].parts?.[0]?.text
+      (!history[history.length - 1].parts?.[0]?.text && !imageFile) // Ensure either text or image is present
     ) {
       return NextResponse.json(
-        { error: "Invalid or empty conversation history provided." },
+        {
+          error: "Invalid or empty conversation history or no image provided.",
+        },
         { status: 400 }
       );
     }
-    // --- END: Optimization 3 ---
+    // --- END: Input Validation ---
 
     const lastMessage = history[history.length - 1];
-    const userQueryText = lastMessage.parts[0].text;
+    let userQueryText = lastMessage.parts[0]?.text || ""; // Initialize, might be empty if only image
 
-    // Check if the query is out of tax scope
-    if (!isContextuallyInScope(history, 3, taxKeywords)) {
+    let visionInputParts: Array<any> = [];
+
+    // --- START: Image Processing ---
+    if (imageFile) {
+      const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
+      const mimeType = imageFile.type || "image/jpeg";
+      const base64Image = imageBuffer.toString("base64");
+
+      visionInputParts.push({
+        inlineData: {
+          data: base64Image,
+          mimeType,
+        },
+      });
+
+      if (!userQueryText) {
+        userQueryText =
+          "Please analyze this image for any tax-related information, such as invoices, receipts, or financial statements, and explain its correlation with Indonesian tax regulations.";
+      } else {
+        userQueryText = `Based on this image and my question: "${userQueryText}", please provide tax-related insights.`;
+      }
+    }
+    // --- END: Image Processing ---
+
+    // Check if the query (now potentially enriched by image data) is out of tax scope
+    // This `isContextuallyInScope` might need refinement to consider image content too.
+    if (!isContextuallyInScope(history, 3, taxKeywords) && !imageFile) {
+      // Only block if no image and out of scope
       return NextResponse.json({
         question: userQueryText,
         answer:
@@ -54,23 +83,27 @@ export async function POST(req: Request) {
     const model: GenerativeModel = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
       systemInstruction,
-      // --- START: Optimization 4 - Safety Settings (Optional but Recommended) ---
-      // Configure safety settings if you want to control harmful content
-      // safetySettings: [
-      //   {
-      //     category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-      //     threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      //   },
-      //   // Add other categories as needed
-      // ],
-      // --- END: Optimization 4 ---
+    });
+
+    // Prepare content for Gemini, combining text and image parts
+    const chatHistoryWithVision = history.map((message: any) => {
+      if (message.role === "user" && message === lastMessage) {
+        return {
+          role: "user",
+          parts: [
+            { text: userQueryText },
+            ...visionInputParts, // Add image data here
+          ],
+        };
+      }
+      return message;
     });
 
     const chat: ChatSession = model.startChat({
-      history,
+      history: chatHistoryWithVision,
     });
 
-    const result = await chat.sendMessage(userQueryText);
+    const result = await chat.sendMessage(userQueryText); // You might send a more refined prompt here for image analysis
     const response = await result.response;
     let text = response.text();
 
@@ -114,17 +147,14 @@ export async function POST(req: Request) {
     } catch (err) {
       console.error("JSON parsing error:", err);
       console.error("Failed JSON text:", cleanText);
-      // Provide a more informative error to the user if JSON parsing fails
       return NextResponse.json({
-        question: userQueryText,
         answer:
           "Maaf, saya mengalami kesulitan dalam memproses jawaban karena format yang tidak sesuai dari model AI. Silakan coba ajukan pertanyaan dengan format yang lebih jelas atau gunakan kata kunci yang spesifik.",
         examples: [],
         regulations: [],
-        references: [], // No references if parsing failed
+        references: [],
       });
     }
-    // --- END: Optimization 5 ---
 
     // Extract citations (if any) and merge with model's references
     const citations =
@@ -133,24 +163,23 @@ export async function POST(req: Request) {
         .filter(Boolean) ?? [];
 
     const finalReferences = [
-      ...new Set([...(parsed.references || []), ...citations]), // Use a Set to avoid duplicates
+      ...new Set([...(parsed.references || []), ...citations]),
     ];
 
     return NextResponse.json({
-      question: parsed.question,
       answer: parsed.answer,
       examples: parsed.examples,
       regulations: parsed.regulations,
       references: finalReferences,
     });
   } catch (error) {
-    console.error("Error in API route:", error); // More generic error logging
-    return NextResponse.json(
-      {
-        error:
-          "Terjadi kesalahan internal saat memproses permintaan Anda. Silakan coba lagi nanti.",
-      },
-      { status: 500 }
-    );
+    console.error("Error in API route:", error);
+    return NextResponse.json({
+      answer:
+        "Maaf, saya mengalami kesulitan dalam memproses jawaban karena format yang tidak sesuai dari model AI. Silakan coba ajukan pertanyaan dengan format yang lebih jelas atau gunakan kata kunci yang spesifik.",
+      examples: [],
+      regulations: [],
+      references: [],
+    });
   }
 }

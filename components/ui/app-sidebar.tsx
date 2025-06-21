@@ -45,7 +45,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   <SidebarMenuButton asChild>
                     <button
                       onClick={onNewChat} // Call onNewChat when clicked
-                      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all hover:bg-muted text-muted-foreground"
+                      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all "
                     >
                       {open && (
                         <span className="truncate font-semibold mr-1">
