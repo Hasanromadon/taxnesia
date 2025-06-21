@@ -110,7 +110,7 @@ export default function TaxChatbot() {
         <header className="sticky top-0 z-10 bg-white shadow-sm py-4">
           <div className="container mx-auto flex items-center justify-between px-4">
             <p className="font-semibold text-xl text-gray-800 ml-8">
-              Taxnesa AI
+              Taxnesia AI
             </p>
             <div className="flex items-center gap-3">
               <Avatar>

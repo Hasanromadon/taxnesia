@@ -91,7 +91,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               </SidebarMenu>
               {open && (
                 <div className="text-xs text-muted-foreground text-center py-4">
-                  Taxnesa AI &copy; 2025
+                  Taxnesia AI &copy; 2025
                 </div>
               )}
             </SidebarGroupContent>

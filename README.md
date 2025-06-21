@@ -2,6 +2,10 @@
 
 **Taxnesia** adalah chatbot AI berbasis web yang membantu pengguna memahami perpajakan di Indonesia seperti PPN, PPh, faktur pajak, dan lainnya. Pengguna juga dapat mengunggah gambar dokumen pajak (seperti invoice atau bukti potong) untuk dianalisis oleh AI menggunakan teknologi Google Gemini.
 
+👉 **Preview Live App:**  
+🔗 [taxnesia.netlify.app](https://taxnesia.netlify.app)  
+[![Netlify Status](https://api.netlify.com/api/v1/badges/cb290873-40cf-4116-a071-0a8dce665966/deploy-status)](https://app.netlify.com/projects/taxnesia/deploys)
+
 ---
 
 ## 🚀 Fitur Utama
