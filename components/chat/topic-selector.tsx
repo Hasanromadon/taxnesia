@@ -1,5 +1,4 @@
 import { topicQuestions } from "@/constants/topics";
-import Image from "next/image";
 
 interface TopicSelectorProps {
   onSelect: (topic: string) => void;
@@ -8,7 +7,6 @@ interface TopicSelectorProps {
 export const TopicSelector: React.FC<TopicSelectorProps> = ({ onSelect }) => {
   return (
     <div className="flex flex-col items-center text-center mt-6">
-      <Image width={100} height={100} alt="avatar bot" src="/avatar-bot.png" />
       <div className="text-center mb-6">
         <h2 className="text-lg font-semibold text-gray-800 mb-2">
           Selamat datang di Asisten Pajak Digital
